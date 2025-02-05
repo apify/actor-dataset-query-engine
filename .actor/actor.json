@@ -1,0 +1,13 @@
+{
+	"actorSpecification": 1,
+	"name": "dataset-query-engine",
+	"title": "Dataset query engine",
+	"description": "Query Apify dataset with a natural language",
+	"version": "0.0",
+	"buildTag": "latest",
+	"usesStandbyMode": true,
+	"meta": {
+		"templateId": "python-standby"
+	},
+	"dockerfile": "./Dockerfile"
+}
