@@ -36,6 +36,12 @@
       "editor": "textfield",
       "isSecret": true
     },
+    "refreshDataset": {
+      "title": "Refresh dataset",
+      "type": "boolean",
+      "description": "In the standby mode, dataset is loaded once and reused to optimize performance. This parameter allows to reload dataset to ensure updated data is available.",
+      "default": false
+    },
     "limit": {
       "title": "Limit number of dataset items used for query",
       "description": "Maximum number of items to return. By default there is no limit.",

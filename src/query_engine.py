@@ -1,24 +1,67 @@
+import logging
+import os
 from typing import Any
 
-from dotenv import load_dotenv
+import duckdb
+import polars as pl
+import sqlite_utils
+from apify_client import ApifyClientAsync
 from llama_index.core.base.response.schema import Response
-from llama_index.core.indices.struct_store.sql_retriever import (
-    DefaultSQLParser,
-)
-from llama_index.core.prompts import PromptTemplate
-from llama_index.core.prompts.default_prompts import DEFAULT_JSONALYZE_PROMPT
-from llama_index.core.prompts.prompt_type import PromptType
+from llama_index.core.indices.struct_store.sql_retriever import DefaultSQLParser
 from llama_index.core.utils import print_text
 from llama_index.core.workflow import Context, Event, StartEvent, StopEvent, Workflow, step
 from llama_index.llms.openai import OpenAI
 
-load_dotenv()
+from .const import DEFAULT_DATASET_PROMPT, DEFAULT_RESPONSE_SYNTHESIS_PROMPT
+from .utils import get_python_type
 
-class JsonAnalyzerEvent(Event):
+logger = logging.getLogger('apify')
+
+SHOW_TABLES_QUERY = 'SHOW TABLES;'
+DROP_TABLE_QUERY = 'DROP TABLE IF EXISTS {table_name};'
+
+
+async def load_dataset(dataset_id: str, *, refresh_dataset: bool = False) -> None:
+    """Load dataset from Apify into memory.
+
+    Registers the dataset in duckdb using dataset_id as the table name.
     """
-    Event containing results of JSON analysis.
+    existing_tables = duckdb.sql(SHOW_TABLES_QUERY)
+    dataset_exists = dataset_id in str(existing_tables)
 
-    Attributes:
+    if refresh_dataset or not dataset_exists:
+        client = ApifyClientAsync()
+        items = await client.dataset(dataset_id).get_items_as_bytes()
+        dataset = pl.read_json(items)
+
+        if dataset_exists:
+            duckdb.sql(DROP_TABLE_QUERY.format(table_name=dataset_id))
+
+        duckdb.register(dataset_id, dataset)
+        logger.debug(f'Dataset {dataset_id} loaded successfully')
+    else:
+        logger.debug(f'Dataset {dataset_id} already loaded')
+
+
+async def query_sql_dataset(dataset_id: str, sql_query: str) -> Any:
+    """Query the dataset using a SQL query, replace 'dataset' with dataset_id.
+
+    Load the dataset if it is not already loaded.
+    """
+    r = duckdb.sql('SHOW TABLES;')
+    if dataset_id not in str(r):
+        logger.debug(f'Dataset {dataset_id} not found ... loading dataset')
+        await load_dataset(dataset_id)
+
+    sql_query = sql_query.replace('dataset', dataset_id)
+    return duckdb.sql(sql_query).fetchall()
+
+
+class DatasetAnalyzerEvent(Event):
+    """
+    Event that contains results of analysis.
+
+    Event is a pydantic object with the following attributes:
         sql_query (str): The generated SQL query.
         table_schema (Dict[str, Any]): Schema of the analyzed table.
         results (List[Dict[str, Any]]): Query execution results.
@@ -29,90 +72,49 @@ class JsonAnalyzerEvent(Event):
     results: list[dict[str, Any]]
 
 
-DEFAULT_RESPONSE_SYNTHESIS_PROMPT_TMPL = (
-    "Given a query, synthesize a response based on SQL query results"
-    " to satisfy the query. Only include details that are relevant to"
-    " the query. If you don't know the answer, then say that.\n"
-    "SQL Query: {sql_query}\n"
-    "Table Schema: {table_schema}\n"
-    "SQL Response: {sql_response}\n"
-    "Query: {query_str}\n"
-    "Response: "
-)
-
-DEFAULT_RESPONSE_SYNTHESIS_PROMPT = PromptTemplate(
-    DEFAULT_RESPONSE_SYNTHESIS_PROMPT_TMPL,
-    prompt_type=PromptType.SQL_RESPONSE_SYNTHESIS,
-)
-
-DEFAULT_TABLE_NAME = 'items'
-
-
-class JSONAnalyzeQueryEngineWorkflow(Workflow):
+class DatasetAnalyzeQueryEngineWorkflow(Workflow):
     @step
-    async def jsonalyzer(
-        self, ctx: Context, ev: StartEvent
-    ) -> JsonAnalyzerEvent:
+    async def dataset_analyzer(self, ctx: Context, ev: StartEvent) -> DatasetAnalyzerEvent:
         """
-        Analyze JSON data using a SQL-like query approach.
+        Analyze Apify datatest using a SQL-like query approach.
 
-        This asynchronous method sets up an in-memory SQLite database, loads JSON data,
-        generates a SQL query based on a natural language question, executes the query,
-        and returns the results.
+        This asynchronous method sets up an in-memory duckdb database and loads Apify dataset into it.
+        It generates a SQL query based on a natural language question, executes the query, and returns the results.
 
         Args:
             ctx (Context): The context object for storing data during execution.
             ev (StartEvent): The event object containing input parameters.
 
         Returns:
-            JsonAnalyzerEvent: An event object containing the SQL query, table schema, and query results.
+            DatasetAnalyzerEvent: An event object containing the SQL query, table schema, and query results.
 
         The method performs the following steps:
-        1. Imports the required 'sqlite-utils' package.
-        2. Extracts necessary data from the input event.
-        3. Sets up an in-memory SQLite database and loads the JSON data.
-        4. Generates a SQL query using a LLM based on the input question.
-        5. Executes the SQL query and retrieves the results.
-        6. Returns the results along with the SQL query and table schema.
-
-        Note:
-            This method requires the 'sqlite-utils' package to be installed.
+        - Extracts necessary data from the input event.
+        - Generates a SQL query using a LLM based on the input question.
+        - Executes the SQL query and retrieves the results.
+        - Returns the results along with the SQL query and table schema.
         """
-        try:
-            import sqlite_utils
-        except ImportError as exc:
-            IMPORT_ERROR_MSG = (
-                'sqlite-utils is needed to use this Query Engine:\n'
-                'pip install sqlite-utils'
-            )
-
-            raise ImportError(IMPORT_ERROR_MSG) from exc
-
         await ctx.set('query', ev.get('query'))
         await ctx.set('llm', ev.get('llm'))
 
         query = ev.get('query')
         table_name = ev.get('table_name')
-        list_of_dict = ev.get('list_of_dict')
-        prompt = DEFAULT_JSONALYZE_PROMPT
+        llm = ev.get('llm')
 
-        # Instantiate in-memory SQLite database
-        db = sqlite_utils.Database(memory=True)
-        try:
-            # Load list of dictionaries into SQLite database
-            db[ev.table_name].insert_all(list_of_dict)
-        except sqlite_utils.utils.sqlite3.IntegrityError as exc:
-            print_text(
-                f'Error inserting into table {table_name}, expected format:'
-            )
-            print_text('[{col1: val1, col2: val2, ...}, ...]')
-            raise ValueError('Invalid list_of_dict') from exc
+        prompt = DEFAULT_DATASET_PROMPT
 
-        # Get the table schema
-        table_schema = db[table_name].columns_dict
+        await load_dataset(table_name)
+        # Get the table schema in the formatL VARCHAR, INT, etc.
+        sql_schema = duckdb.sql(f'DESCRIBE {table_name}').fetchall()
 
-        # Get the SQL query with text-to-SQL prompt
-        response_str = await ev.llm.apredict(
+        # convert the SQL schema to a dictionary of column names and python types (for pydantic validation)
+        table_schema = {}
+        for col in sql_schema:
+            col_name, sql_type = col[0], col[1]
+            table_schema[col_name] = get_python_type(sql_type)
+
+        # Get the SQL query with text-to-SQL prompt, provide table name and schema to ensure correctness
+        response_str = await llm.apredict(
             prompt=prompt,
             table_name=table_name,
             table_schema=table_schema,
@@ -120,24 +122,19 @@ class JSONAnalyzeQueryEngineWorkflow(Workflow):
         )
 
         sql_parser = DefaultSQLParser()
-
-        sql_query = sql_parser.parse_response_to_sql(response_str, ev.query)
+        sql_query = sql_parser.parse_response_to_sql(response_str, query)
 
         try:
             # Execute the SQL query
-            results = list(db.query(sql_query))
+            results = duckdb.sql(sql_query).df().to_dict(orient='records')
         except sqlite_utils.utils.sqlite3.OperationalError as exc:
             print_text(f'Error executing query: {sql_query}')
             raise ValueError('Invalid query') from exc
 
-        return JsonAnalyzerEvent(
-            sql_query=sql_query, table_schema=table_schema, results=results
-        )
+        return DatasetAnalyzerEvent(sql_query=sql_query, table_schema=table_schema, results=results)
 
     @step
-    async def synthesize(
-        self, ctx: Context, ev: JsonAnalyzerEvent
-    ) -> StopEvent:
+    async def synthesize(self, ctx: Context, ev: DatasetAnalyzerEvent) -> StopEvent:
         """Synthesize the response."""
         llm = await ctx.get('llm', default=None)
         query = await ctx.get('query', default=None)
@@ -149,231 +146,34 @@ class JSONAnalyzeQueryEngineWorkflow(Workflow):
             sql_response=ev.results,
             query_str=query,
         )
-
-        response_metadata = {
-            'sql_query': ev.sql_query,
-            'table_schema': str(ev.table_schema),
-        }
-
+        response_metadata = {'sql_query': ev.sql_query, 'table_schema': str(ev.table_schema)}
         response = Response(response=response_str, metadata=response_metadata)
-
         return StopEvent(result=response)
 
-json_list = [
-        {
-            'name': 'John Doe',
-            'age': 25,
-            'major': 'Computer Science',
-            'email': 'john.doe@example.com',
-            'address': '123 Main St',
-            'city': 'New York',
-            'state': 'NY',
-            'country': 'USA',
-            'phone': '+1 123-456-7890',
-            'occupation': 'Software Engineer',
-        },
-        {
-            'name': 'Jane Smith',
-            'age': 30,
-            'major': 'Business Administration',
-            'email': 'jane.smith@example.com',
-            'address': '456 Elm St',
-            'city': 'San Francisco',
-            'state': 'CA',
-            'country': 'USA',
-            'phone': '+1 234-567-8901',
-            'occupation': 'Marketing Manager',
-        },
-        {
-            'name': 'Michael Johnson',
-            'age': 35,
-            'major': 'Finance',
-            'email': 'michael.johnson@example.com',
-            'address': '789 Oak Ave',
-            'city': 'Chicago',
-            'state': 'IL',
-            'country': 'USA',
-            'phone': '+1 345-678-9012',
-            'occupation': 'Financial Analyst',
-        },
-        {
-            'name': 'Emily Davis',
-            'age': 28,
-            'major': 'Psychology',
-            'email': 'emily.davis@example.com',
-            'address': '234 Pine St',
-            'city': 'Los Angeles',
-            'state': 'CA',
-            'country': 'USA',
-            'phone': '+1 456-789-0123',
-            'occupation': 'Psychologist',
-        },
-        {
-            'name': 'Alex Johnson',
-            'age': 27,
-            'major': 'Engineering',
-            'email': 'alex.johnson@example.com',
-            'address': '567 Cedar Ln',
-            'city': 'Seattle',
-            'state': 'WA',
-            'country': 'USA',
-            'phone': '+1 567-890-1234',
-            'occupation': 'Civil Engineer',
-        },
-        {
-            'name': 'Jessica Williams',
-            'age': 32,
-            'major': 'Biology',
-            'email': 'jessica.williams@example.com',
-            'address': '890 Walnut Ave',
-            'city': 'Boston',
-            'state': 'MA',
-            'country': 'USA',
-            'phone': '+1 678-901-2345',
-            'occupation': 'Biologist',
-        },
-        {
-            'name': 'Matthew Brown',
-            'age': 26,
-            'major': 'English Literature',
-            'email': 'matthew.brown@example.com',
-            'address': '123 Peach St',
-            'city': 'Atlanta',
-            'state': 'GA',
-            'country': 'USA',
-            'phone': '+1 789-012-3456',
-            'occupation': 'Writer',
-        },
-        {
-            'name': 'Olivia Wilson',
-            'age': 29,
-            'major': 'Art',
-            'email': 'olivia.wilson@example.com',
-            'address': '456 Plum Ave',
-            'city': 'Miami',
-            'state': 'FL',
-            'country': 'USA',
-            'phone': '+1 890-123-4567',
-            'occupation': 'Artist',
-        },
-        {
-            'name': 'Daniel Thompson',
-            'age': 31,
-            'major': 'Physics',
-            'email': 'daniel.thompson@example.com',
-            'address': '789 Apple St',
-            'city': 'Denver',
-            'state': 'CO',
-            'country': 'USA',
-            'phone': '+1 901-234-5678',
-            'occupation': 'Physicist',
-        },
-        {
-            'name': 'Sophia Clark',
-            'age': 27,
-            'major': 'Sociology',
-            'email': 'sophia.clark@example.com',
-            'address': '234 Orange Ln',
-            'city': 'Austin',
-            'state': 'TX',
-            'country': 'USA',
-            'phone': '+1 012-345-6789',
-            'occupation': 'Social Worker',
-        },
-        {
-            'name': 'Christopher Lee',
-            'age': 33,
-            'major': 'Chemistry',
-            'email': 'christopher.lee@example.com',
-            'address': '567 Mango St',
-            'city': 'San Diego',
-            'state': 'CA',
-            'country': 'USA',
-            'phone': '+1 123-456-7890',
-            'occupation': 'Chemist',
-        },
-        {
-            'name': 'Ava Green',
-            'age': 28,
-            'major': 'History',
-            'email': 'ava.green@example.com',
-            'address': '890 Cherry Ave',
-            'city': 'Philadelphia',
-            'state': 'PA',
-            'country': 'USA',
-            'phone': '+1 234-567-8901',
-            'occupation': 'Historian',
-        },
-        {
-            'name': 'Ethan Anderson',
-            'age': 30,
-            'major': 'Business',
-            'email': 'ethan.anderson@example.com',
-            'address': '123 Lemon Ln',
-            'city': 'Houston',
-            'state': 'TX',
-            'country': 'USA',
-            'phone': '+1 345-678-9012',
-            'occupation': 'Entrepreneur',
-        },
-        {
-            'name': 'Isabella Carter',
-            'age': 28,
-            'major': 'Mathematics',
-            'email': 'isabella.carter@example.com',
-            'address': '456 Grape St',
-            'city': 'Phoenix',
-            'state': 'AZ',
-            'country': 'USA',
-            'phone': '+1 456-789-0123',
-            'occupation': 'Mathematician',
-        },
-        {
-            'name': 'Andrew Walker',
-            'age': 32,
-            'major': 'Economics',
-            'email': 'andrew.walker@example.com',
-            'address': '789 Berry Ave',
-            'city': 'Portland',
-            'state': 'OR',
-            'country': 'USA',
-            'phone': '+1 567-890-1234',
-            'occupation': 'Economist',
-        },
-        {
-            'name': 'Mia Evans',
-            'age': 29,
-            'major': 'Political Science',
-            'email': 'mia.evans@example.com',
-            'address': '234 Lime St',
-            'city': 'Washington',
-            'state': 'DC',
-            'country': 'USA',
-            'phone': '+1 678-901-2345',
-            'occupation': 'Political Analyst',
-        },
-    ]
 
-llm = OpenAI(model='gpt-3.5-turbo')
+async def run_workflow(query: str, table_name: str, llm: OpenAI) -> Any:
+    w = DatasetAnalyzeQueryEngineWorkflow()
+    return await w.run(query=query, llm=llm, table_name=table_name)
 
-w = JSONAnalyzeQueryEngineWorkflow()
 
-# Run a query
+if __name__ == '__main__':
+    import asyncio
 
-# query = 'What is the maximum age among the individuals?'
-query = 'I need email and phone number of the individuals who are older than 30 years.'
+    from dotenv import load_dotenv
 
-async def main():
-    r = await w.run(
-        query=query, list_of_dict=json_list, llm=llm, table_name=DEFAULT_TABLE_NAME
-    )
+    load_dotenv()
 
-    print(f'> Question: {query}')
-    print(f'Answer: {r}')
-    return r
+    dataset_id_ = 'gNcf77u0UikBXXtf7'
 
-import asyncio
+    llm_ = OpenAI(model='gpt-4o-mini', api_key=os.environ['OPENAI_API_KEY'])
+    w = DatasetAnalyzeQueryEngineWorkflow()
+    print(f'Dataset {dataset_id_} loaded successfully')  # noqa:T201
+    query_ = 'I need phone numbers for places in Rockaway Park city'
 
-loop = asyncio.new_event_loop()
+    async def main() -> Any:
+        r = await w.run(query=query_, llm=llm_, table_name=dataset_id_)
+        print(f'> Question: {query_}')  # noqa:T201
+        print(f'Answer: {r}')  # noqa:T201
+        return r
 
-result = loop.run_until_complete(main())
+    asyncio.run(main())

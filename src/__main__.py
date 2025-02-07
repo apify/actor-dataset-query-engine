@@ -3,7 +3,7 @@ import logging
 
 from apify.log import ActorLogFormatter
 
-from .main import main  # type: ignore
+from .main import main
 
 handler = logging.StreamHandler()
 handler.setFormatter(ActorLogFormatter())
