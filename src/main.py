@@ -35,10 +35,13 @@ if ACTOR_IS_AT_HOME:
     PORT = Actor.config.standby_port if STANDBY_MODE else Actor.config.web_server_port
 else:
     from dotenv import load_dotenv
-
     load_dotenv(pathlib.Path(__file__).parent.joinpath('.env').resolve())
     HOST = 'http://localhost'
     PORT = 4321
+
+ACTOR_URL = f'{HOST}' if ACTOR_IS_AT_HOME else f'{HOST}:{PORT}'
+MESSAGE = (f'Actor is running in standby mode, please provide query params at {ACTOR_URL}, you can use the '
+           f'following params: {ActorInputStandbyStarts.model_fields}')
 
 
 async def process_query(actor_input: ActorInput) -> Any:
@@ -62,37 +65,52 @@ async def process_query(actor_input: ActorInput) -> Any:
         return msg
 
 
-async def root(request: Request) -> JSONResponse:
-    if request.method == 'GET':
-        if request.headers.get(HEADERS_READINESS_PROBE):
-            logger.debug('Received readiness probe')
-            return JSONResponse({'status': 'ok'})
+async def route_root(request: Request) -> JSONResponse:
 
-        return JSONResponse({'message': 'Hello from Actor'})
+    logger.debug('Received request at /')
+    if request.method != 'GET':
+        return JSONResponse({'message': f'Method: {request.method} not allowed'}, status_code=405)
 
-    return JSONResponse({'message': 'Method not allowed'}, status_code=405)
+    if request.headers.get(HEADERS_READINESS_PROBE):
+        logger.debug('Received readiness probe')
+        return JSONResponse({'status': 'ok'})
+
+    query_params = dict(request.query_params.items())
+    query_params.pop('token', None)
+    if request.query_params:
+        try:
+            actor_input = ActorInput(**query_params)
+            return JSONResponse({'message': await process_query(actor_input)})
+        except Exception as e:
+            msg = f'Failed to parse query params, error: {e}'
+            Actor.log.error(msg)
+            return JSONResponse({'message': msg}, status_code=400)
+
+    return JSONResponse(MESSAGE, status_code=200)
+
+
 
 
 app = Starlette(
     debug=True,
     routes=[
-        Route('/', root),
+        Route('/', route_root),
     ],
 )
 
 
-def serve() -> None:
-    logger.info(f'Starting the HTTP server on port {Actor.config.web_server_port}')
-    config = uvicorn.Config(app, port=Actor.config.standby_port)
+async def start_server() -> None:
+    logger.info(f'Starting the HTTP server at {ACTOR_URL}')
+    config = uvicorn.Config(app, port=PORT)
     server = uvicorn.Server(config)
-    server.run()
+    await server.serve()
 
 
 async def main() -> None:
     async with Actor:
         if STANDBY_MODE:
             logger.info(f'Starting the HTTP server on port {Actor.config.web_server_port}')
-            serve()
+            await start_server()
         else:
             logger.info('Starting in query engine in the NORMAL mode')
             try:
@@ -104,3 +122,7 @@ async def main() -> None:
             except Exception as e:
                 Actor.log.error('Error in inputs: %s', str(e))
                 await Actor.fail(status_message=str(e))
+
+if __name__ == '__main__':
+    import asyncio
+    asyncio.run(main())
