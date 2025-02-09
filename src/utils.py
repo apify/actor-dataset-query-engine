@@ -1,6 +1,5 @@
 import re
 from datetime import date, datetime, time
-from typing import Any
 
 from apify import Actor
 
@@ -43,7 +42,7 @@ def get_python_type(sql_type: str) -> type:
 
     # Handle SQL array types (e.g., INTEGER[] -> list[int])
     if sql_type.endswith('[]'):
-        return list[Any]
+        return list
 
     # Map common SQL types to Python types.
     sql_type_mappings = {

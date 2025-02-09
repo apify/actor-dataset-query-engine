@@ -41,7 +41,7 @@ else:
     PORT = 4321
 
 ACTOR_URL = f'{HOST}' if ACTOR_IS_AT_HOME else f'{HOST}:{PORT}'
-MESSAGE = (f'Actor is running in standby mode, please provide query params at {ACTOR_URL}, you can use the '
+STANDBY_MESSAGE = (f'Actor is running in standby mode, please provide query params at {ACTOR_URL}, you can use the '
            f'following params: {ActorInput.model_fields}')
 
 
@@ -81,13 +81,15 @@ async def route_root(request: Request) -> JSONResponse:
     if request.query_params:
         try:
             actor_input = ActorInput(**query_params)
-            return JSONResponse({'message': await process_query(actor_input)})
+            result = await process_query(actor_input)
+            logger.info(f'Query {actor_input.query} processed successfully, result: {result}')
+            return JSONResponse({'message': result.response, 'metadata': result.metadata })
         except Exception as e:
             msg = f'Failed to process request, error: {e}'
-            Actor.log.error(msg)
+            logger.exception(msg)
             raise HTTPException(status_code=400, detail=msg) from e
 
-    return JSONResponse(MESSAGE, status_code=200)
+    return JSONResponse({'message': STANDBY_MESSAGE}, status_code=200)
 
 
 app = Starlette(

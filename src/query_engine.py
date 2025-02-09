@@ -163,12 +163,12 @@ if __name__ == '__main__':
 
     load_dotenv()
 
-    dataset_id_ = 'gNcf77u0UikBXXtf7'
+    dataset_id_ = 'nLlhc8Fz9S5dCTQab'
 
     llm_ = OpenAI(model='gpt-4o-mini', api_key=os.environ['OPENAI_API_KEY'])
     w = DatasetAnalyzeQueryEngineWorkflow()
     print(f'Dataset {dataset_id_} loaded successfully')  # noqa:T201
-    query_ = 'I need phone numbers for places in Rockaway Park city'
+    query_ = 'please give me restaurants with the best reviews and their phone numbers'
 
     async def main() -> Any:
         r = await w.run(query=query_, llm=llm_, table_name=dataset_id_)

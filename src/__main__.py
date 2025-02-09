@@ -9,7 +9,7 @@ handler = logging.StreamHandler()
 handler.setFormatter(ActorLogFormatter())
 
 apify_client_logger = logging.getLogger('apify_client')
-apify_client_logger.setLevel(logging.INFO)
+apify_client_logger.setLevel(logging.ERROR)
 apify_client_logger.addHandler(handler)
 
 apify_logger = logging.getLogger('apify')
