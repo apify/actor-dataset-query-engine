@@ -6,15 +6,16 @@ import uvicorn
 from apify import Actor
 from llama_index.llms.openai import OpenAI
 from starlette.applications import Starlette
+from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from src.utils import check_inputs
-
 from .const import HEADERS_READINESS_PROBE
+from .exceptions import DatasetLoadError, WorkflowExecutionError
 from .input_model import DatasetQueryAgent as ActorInput
 from .query_engine import load_dataset, run_workflow
+from .utils import check_inputs
 
 
 class ActorInputStandbyStarts(ActorInput):
@@ -41,7 +42,7 @@ else:
 
 ACTOR_URL = f'{HOST}' if ACTOR_IS_AT_HOME else f'{HOST}:{PORT}'
 MESSAGE = (f'Actor is running in standby mode, please provide query params at {ACTOR_URL}, you can use the '
-           f'following params: {ActorInputStandbyStarts.model_fields}')
+           f'following params: {ActorInput.model_fields}')
 
 
 async def process_query(actor_input: ActorInput) -> Any:
@@ -54,7 +55,7 @@ async def process_query(actor_input: ActorInput) -> Any:
     except Exception as e:
         msg = f'Error loading dataset {dataset_id} with error: {e}'
         logger.exception(msg)
-        return msg
+        raise DatasetLoadError(msg) from e
 
     try:
         llm = OpenAI(model=str(actor_input.modelName), api_key=actor_input.llmProviderApiKey)
@@ -62,7 +63,7 @@ async def process_query(actor_input: ActorInput) -> Any:
     except Exception as e:
         msg = f'Error running workflow, error: {e}'
         logger.exception(msg)
-        return msg
+        raise WorkflowExecutionError(msg) from e
 
 
 async def route_root(request: Request) -> JSONResponse:
@@ -71,7 +72,7 @@ async def route_root(request: Request) -> JSONResponse:
     if request.method != 'GET':
         return JSONResponse({'message': f'Method: {request.method} not allowed'}, status_code=405)
 
-    if request.headers.get(HEADERS_READINESS_PROBE):
+    if str(request.headers.get(HEADERS_READINESS_PROBE)) == '1':
         logger.debug('Received readiness probe')
         return JSONResponse({'status': 'ok'})
 
@@ -82,13 +83,11 @@ async def route_root(request: Request) -> JSONResponse:
             actor_input = ActorInput(**query_params)
             return JSONResponse({'message': await process_query(actor_input)})
         except Exception as e:
-            msg = f'Failed to parse query params, error: {e}'
+            msg = f'Failed to process request, error: {e}'
             Actor.log.error(msg)
-            return JSONResponse({'message': msg}, status_code=400)
+            raise HTTPException(status_code=400, detail=msg) from e
 
     return JSONResponse(MESSAGE, status_code=200)
-
-
 
 
 app = Starlette(
@@ -115,7 +114,10 @@ async def main() -> None:
             logger.info('Starting in query engine in the NORMAL mode')
             try:
                 logger.info('Starting dataset query engine, checking inputs')
-                payload = await Actor.get_input()
+                if payload := await Actor.get_input():
+                    await Actor.fail(status_message='Actor input was not provided')
+                    return
+
                 actor_input = ActorInput(**payload)
                 actor_input = await check_inputs(actor_input, payload)
                 await process_query(actor_input)

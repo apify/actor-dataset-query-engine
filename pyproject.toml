@@ -21,6 +21,8 @@ dev = [
     "datamodel-code-generator>=0.27.1",
     "llama-index-utils-workflow>=0.3.0",
     "mypy>=1.14.1",
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.25.3",
     "python-dotenv>=1.0.1",
     "ruff>=0.9.4",
 ]
@@ -94,3 +96,6 @@ warn_unused_ignores = true
 
 [tool.mypy-sortedcollections]
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
