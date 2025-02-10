@@ -1,6 +1,5 @@
 import logging
 import pathlib
-from typing import Any
 
 import uvicorn
 from apify import Actor
@@ -14,7 +13,9 @@ from starlette.routing import Route
 from .const import HEADERS_READINESS_PROBE
 from .exceptions import DatasetLoadError, WorkflowExecutionError
 from .input_model import DatasetQueryAgent as ActorInput
-from .query_engine import load_dataset, run_workflow
+from .query_agent import run_agent
+from .query_engine import run_workflow
+from .tools import load_dataset
 from .utils import check_inputs
 
 
@@ -45,25 +46,33 @@ STANDBY_MESSAGE = (f'Actor is running in standby mode, please provide query para
            f'following params: {ActorInput.model_fields}')
 
 
-async def process_query(actor_input: ActorInput) -> Any:
+async def process_query(actor_input: ActorInput) -> str:
     """Process query, load dataset (if it was not loaded yet) and run workflow (query engine)"""
 
     dataset_id = actor_input.datasetId
     try:
-        await load_dataset(dataset_id, refresh_dataset=bool(actor_input.refreshDataset))
+        table_schema = await load_dataset(dataset_id, refresh_dataset=bool(actor_input.refreshDataset))
         Actor.log.info(f'Dataset {dataset_id} loaded successfully')
     except Exception as e:
         msg = f'Error loading dataset {dataset_id} with error: {e}'
         logger.exception(msg)
         raise DatasetLoadError(msg) from e
 
-    try:
-        llm = OpenAI(model=str(actor_input.modelName), api_key=actor_input.llmProviderApiKey)
-        return await run_workflow(query=actor_input.query, table_name=dataset_id, llm=llm)
-    except Exception as e:
-        msg = f'Error running workflow, error: {e}'
-        logger.exception(msg)
-        raise WorkflowExecutionError(msg) from e
+    llm = OpenAI(model=str(actor_input.modelName), api_key=actor_input.llmProviderApiKey, temperature=0)
+    if actor_input.useAgent:
+        try:
+            return await run_agent(actor_input.query, table_name=dataset_id, table_schema=table_schema, llm=llm)
+        except Exception as e:
+            msg = f'Error running workflow, error: {e}'
+            logger.exception(msg)
+            raise WorkflowExecutionError(msg) from e
+    else:
+        try:
+            return (await run_workflow(query=actor_input.query, table_name=dataset_id, llm=llm)).response
+        except Exception as e:
+            msg = f'Error running workflow, error: {e}'
+            logger.exception(msg)
+            raise WorkflowExecutionError(msg) from e
 
 
 async def route_root(request: Request) -> JSONResponse:
@@ -83,7 +92,7 @@ async def route_root(request: Request) -> JSONResponse:
             actor_input = ActorInput(**query_params)
             result = await process_query(actor_input)
             logger.info(f'Query {actor_input.query} processed successfully, result: {result}')
-            return JSONResponse({'message': result.response, 'metadata': result.metadata })
+            return JSONResponse({'message': result})
         except Exception as e:
             msg = f'Failed to process request, error: {e}'
             logger.exception(msg)
@@ -116,7 +125,7 @@ async def main() -> None:
             logger.info('Starting in query engine in the NORMAL mode')
             try:
                 logger.info('Starting dataset query engine, checking inputs')
-                if payload := await Actor.get_input():
+                if not (payload := await Actor.get_input()):
                     await Actor.fail(status_message='Actor input was not provided')
                     return
 

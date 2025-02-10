@@ -94,6 +94,7 @@ def is_query_sql(query: str) -> bool:
 async def user_query_to_sql(query: str, table_name: str, table_schema: dict[str, Any]) -> str:
     """
     Converts a user query written in natural language into a SQL query.
+    If you need to use LIKE statement for an array, you need to unnest it first.
 
     Args:
         query: The natural language query input from the user.

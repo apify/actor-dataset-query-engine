@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Any
 
 from llama_index.core.agent import ReActAgent
 from llama_index.core.tools import FunctionTool
@@ -15,7 +16,7 @@ results_synthesize_tool = FunctionTool.from_defaults(fn=synthesize_results)
 
 logger = logging.getLogger('apify')
 
-async def run_agent(query: str, table_name: str, llm: OpenAI) -> str:
+async def run_agent(query: str, table_name: str, table_schema: dict[str, Any], llm: OpenAI) -> str:
     """
         Runs an agent to process a query using an LLM and tools.
 
@@ -27,13 +28,13 @@ async def run_agent(query: str, table_name: str, llm: OpenAI) -> str:
         Args:
             query: Query string provided by the user for processing.
             table_name: The name of the table whose schema is to be used for the query.
+            table_schema: Schema of the database table.
             llm: The language model to be used for processing.
 
         Returns:
             A string containing the response from the agent.
     """
     LLMRegistry.set(llm)
-    table_schema = await load_dataset(table_name)
 
     context = f'Table name provided by user: {table_name}. Table schema: {table_schema}'
 
@@ -70,5 +71,6 @@ if __name__ == '__main__':
     query_ = 'please give me restaurants with the best reviews and their phone numbers'  # noqa:ERA001,RUF100
     # query_ = "SELECT * FROM dataset WHERE title = 'Lucia Pizza Of Avenue X'"  # noqa:ERA001,RUF100
 
-    answer = asyncio.run(run_agent(query_, dataset_id_, llm_))
+    table_schema_ = asyncio.run(load_dataset(dataset_id_))
+    answer = asyncio.run(run_agent(query_, dataset_id_, table_schema_, llm_))
     print(f'Answer {answer}')  # noqa:T201

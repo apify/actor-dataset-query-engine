@@ -6,6 +6,7 @@ HEADERS_READINESS_PROBE = 'x-apify-container-server-readiness-probe'
 DEFAULT_DATASET_PROMPT_TMPL = (
     "You are given a table named: '{table_name}' with schema, "
     'generate only SQLite SQL query (no surrounding text) to answer the given question.\n'
+    'If you need to use LIKE statement for an array, you need to unnest it first.\n'
     'Table schema:\n'
     '{table_schema}\n'
     'Question: {question}\n\n'

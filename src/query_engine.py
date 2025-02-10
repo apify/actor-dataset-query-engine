@@ -2,182 +2,109 @@ import logging
 import os
 from typing import Any
 
-import duckdb
-import polars as pl
-import sqlite_utils
-from apify_client import ApifyClientAsync
-from llama_index.core.base.response.schema import Response
-from llama_index.core.indices.struct_store.sql_retriever import DefaultSQLParser
-from llama_index.core.utils import print_text
 from llama_index.core.workflow import Context, Event, StartEvent, StopEvent, Workflow, step
 from llama_index.llms.openai import OpenAI
 
-from .const import DEFAULT_DATASET_PROMPT, DEFAULT_RESPONSE_SYNTHESIS_PROMPT
-from .utils import get_python_type, is_sql_query
+from .tools import LLMRegistry, execute_sql, is_query_sql, load_dataset, synthesize_results, user_query_to_sql
 
 logger = logging.getLogger('apify')
-
-SHOW_TABLES_QUERY = 'SHOW TABLES;'
-DROP_TABLE_QUERY = 'DROP TABLE IF EXISTS {table_name};'
-
-
-async def load_dataset(dataset_id: str, *, refresh_dataset: bool = False) -> None:
-    """Load dataset from Apify into memory.
-
-    Registers the dataset in duckdb using dataset_id as the table name.
-    """
-    existing_tables = duckdb.sql(SHOW_TABLES_QUERY)
-    dataset_exists = dataset_id in str(existing_tables)
-
-    if refresh_dataset or not dataset_exists:
-        client = ApifyClientAsync()
-        items = await client.dataset(dataset_id).get_items_as_bytes()
-        dataset = pl.read_json(items)
-
-        if dataset_exists:
-            duckdb.sql(DROP_TABLE_QUERY.format(table_name=dataset_id))
-
-        duckdb.register(dataset_id, dataset)
-        logger.debug(f'Dataset {dataset_id} loaded successfully')
-    else:
-        logger.debug(f'Dataset {dataset_id} already loaded')
-
-
-async def query_sql_dataset(dataset_id: str, sql_query: str) -> Any:
-    """Query the dataset using a SQL query, replace 'dataset' with dataset_id.
-
-    Load the dataset if it is not already loaded.
-    """
-    r = duckdb.sql('SHOW TABLES;')
-    if dataset_id not in str(r):
-        logger.debug(f'Dataset {dataset_id} not found ... loading dataset')
-        await load_dataset(dataset_id)
-
-    sql_query = sql_query.replace('dataset', dataset_id)
-    return duckdb.sql(sql_query).fetchall()
-
-def execute_sql_query(query: str) -> Any | None:
-    try:
-        # Execute the SQL query
-        return duckdb.sql(query).df().to_dict(orient='records')
-    except sqlite_utils.utils.sqlite3.OperationalError as exc:
-        logger.exception(f'Error executing query: {query}')
-        raise ValueError('Invalid query') from exc
 
 
 class DatasetAnalyzerEvent(Event):
     """
-    Event that contains results of analysis.
-
     Event is a pydantic object with the following attributes:
-        sql_query (str): The generated SQL query.
+        query (str): The generated SQL query.
         table_schema (Dict[str, Any]): Schema of the analyzed table.
         results (List[Dict[str, Any]]): Query execution results.
     """
-
-    sql_query: str
+    query: str
     table_schema: dict[str, Any]
 
-class SynthesizeEvent(DatasetAnalyzerEvent):
+class SynthesizeEvent(Event):
+    sql_query: str
+    table_schema: dict[str, Any]
     results: list[dict[str, Any]]
 
 
 class DatasetAnalyzeQueryEngineWorkflow(Workflow):
 
     @step
-    async def user_query_analyzer(self, ctx: Context, ev: StartEvent) -> DatasetAnalyzerEvent:
-        """ Analyze user query whether it is a SQL query or not.
-
-        If it is a SQL query, then it will be executed directly and results will be synthesized.
-        If it is not a SQL query, then it will be analyzed using a SQL-like query approach.
+    async def user_query_analyzer(self, ctx: Context, ev: StartEvent) -> DatasetAnalyzerEvent | SynthesizeEvent:
         """
-        await ctx.set('query', ev.get('query'))
-        await ctx.set('llm', ev.get('llm'))
-        await ctx.set('table_name', ev.get('table_name'))
+        Analyzes user-provided query and dataset for either SQL synthesis or further dataset analysis.
 
+        Args:
+            ctx (Context): The context object where intermediate data is stored.
+            ev (StartEvent): The event payload containing information such as 'llm', 'query', and 'table_name'.
+
+        Returns:
+            DatasetAnalyzerEvent | SynthesizeEvent: If the query is determined to be a valid SQL,
+                returns SynthesizeEvent containing the synthesized  query, the table schema, and the query results.
+                For non-SQL queries, returns DatasetAnalyzerEvent with the query and the table schema.
+
+        """
+        llm = ev.get('llm')
         query = ev.get('query')
         table_name = ev.get('table_name')
 
-        await load_dataset(table_name)
-        # Get the table schema in the formatL VARCHAR, INT, etc.
-        sql_schema = duckdb.sql(f'DESCRIBE {table_name}').fetchall()
-        # convert the SQL schema to a dictionary of column names and python types (for pydantic validation)
-        table_schema = {}
-        for col in sql_schema:
-            col_name, sql_type = col[0], col[1]
-            table_schema[col_name] = get_python_type(sql_type)
+        await ctx.set('llm', llm)
+        await ctx.set('query', ev.get('query'))
+        await ctx.set('table_name', ev.get('table_name'))
 
-        if is_sql_query(query):
-            query = query.replace('dataset', table_name)
-            results = execute_sql_query(query)
-            return SynthesizeEvent(sql_query=query, table_schema=table_schema, results=results)
-        return DatasetAnalyzerEvent(sql_query=query, table_schema=table_schema)
+        LLMRegistry.set(llm)
+        table_schema = await load_dataset(table_name)
+
+        await ctx.set('table_schema', table_schema)
+
+        if is_query_sql(query):
+            sql_query = query.replace('dataset', table_name)
+            results = execute_sql(sql_query)
+            return SynthesizeEvent(sql_query=sql_query, table_schema=table_schema, results=results)
+
+        return DatasetAnalyzerEvent(query=query, table_schema=table_schema)
 
 
 
     @step
     async def dataset_analyzer(self, ctx: Context, ev: DatasetAnalyzerEvent) -> SynthesizeEvent:
         """
-        Analyze Apify datatest using a SQL-like query approach.
-
-        This asynchronous method sets up an in-memory duckdb database and loads Apify dataset into it.
-        It generates a SQL query based on a natural language question, executes the query, and returns the results.
+        Analyzes a dataset by converting a user query to an SQL query, executing the query,
+        and returning the results along with the table schema.
 
         Args:
-            ctx (Context): The context object for storing data during execution.
-            ev (StartEvent): The event object containing input parameters.
+            ctx (Context): The execution context that provides access to runtime data like
+                the table name.
+            ev (DatasetAnalyzerEvent): An event object containing the user query and
+                table schema relevant for generating and executing the SQL query.
 
         Returns:
-            DatasetAnalyzerEvent: An event object containing the SQL query, table schema, and query results.
-
-        The method performs the following steps:
-        - Extracts necessary data from the input event.
-        - Generates a SQL query using a LLM based on the input question.
-        - Executes the SQL query and retrieves the results.
-        - Returns the results along with the SQL query and table schema.
+            SynthesizeEvent: An event containing the executed SQL query, the table schema
+                used, and the results of the query.
         """
-        llm = await ctx.get('llm', default=None)
-        query = await ctx.get('query', default=None)
         table_name = await ctx.get('table_name', default=None)
+        table_schema = await ctx.get('table_name', default=None)
 
-        table_schema = ev.table_schema
-        prompt = DEFAULT_DATASET_PROMPT
+        query = ev.query
 
-        # Get the SQL query with text-to-SQL prompt, provide table name and schema to ensure correctness
-        response_str = await llm.apredict(
-            prompt=prompt,
-            table_name=table_name,
-            table_schema=table_schema,
-            question=query,
-        )
-
-        sql_parser = DefaultSQLParser()
-        sql_query = sql_parser.parse_response_to_sql(response_str, query)
-
-        try:
-            # Execute the SQL query
-            results = duckdb.sql(sql_query).df().to_dict(orient='records')
-        except sqlite_utils.utils.sqlite3.OperationalError as exc:
-            print_text(f'Error executing query: {sql_query}')
-            raise ValueError('Invalid query') from exc
-
+        sql_query = await user_query_to_sql(query, table_name, table_schema)
+        results = execute_sql(sql_query)
         return SynthesizeEvent(sql_query=sql_query, table_schema=table_schema, results=results)
+
 
     @step
     async def synthesize(self, ctx: Context, ev: SynthesizeEvent) -> StopEvent:
-        """Synthesize the response."""
-        llm = await ctx.get('llm', default=None)
-        query = await ctx.get('query', default=None)
+        """
+        Synthesizes results from a SQL query.
 
-        response_str = llm.predict(
-            DEFAULT_RESPONSE_SYNTHESIS_PROMPT,
-            sql_query=ev.sql_query,
-            table_schema=ev.table_schema,
-            sql_response=ev.results,
-            query_str=query,
-        )
-        response_metadata = {'sql_query': ev.sql_query, 'table_schema': str(ev.table_schema)}
-        response = Response(response=response_str, metadata=response_metadata)
+        Args:
+            ctx (Context): The context from which data is retrieved.
+            ev (SynthesizeEvent): The event containing the SQL query, results, and table schema.
+
+        Returns:
+            StopEvent: An event containing the synthesized result.
+        """
+        query = await ctx.get('query', default=None)
+        response = synthesize_results(query, ev.sql_query, ev.results, ev.table_schema)
         return StopEvent(result=response)
 
 
@@ -198,8 +125,8 @@ if __name__ == '__main__':
     llm_ = OpenAI(model='gpt-4o-mini', api_key=os.environ['OPENAI_API_KEY'])
     w = DatasetAnalyzeQueryEngineWorkflow()
     print(f'Dataset {dataset_id_} loaded successfully')  # noqa:T201
-    # query_ = 'please give me restaurants with the best reviews and their phone numbers'
-    query_ = "SELECT * FROM dataset WHERE title = 'Lucia Pizza Of Avenue X'"
+    # query_ = 'please give me restaurants with the best reviews and their phone numbers'  # noqa:ERA001,RUF100
+    query_ = "SELECT * FROM dataset WHERE title = 'Lucia Pizza Of Avenue X'"  # noqa:ERA001,RUF100
 
     async def main() -> Any:
         r = await w.run(query=query_, llm=llm_, table_name=dataset_id_)
