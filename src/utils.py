@@ -1,4 +1,3 @@
-import re
 from datetime import date, datetime, time
 
 from apify import Actor
@@ -76,23 +75,4 @@ def get_python_type(sql_type: str) -> type:
     return sql_type_mappings.get(sql_type, str)
 
 
-def is_sql_query(query: str) -> bool:
-    """
-    Check if a string is a SQL query based on common SQL keywords.
 
-    This function uses a regex to check for the presence of typical SQL keywords
-    such as SELECT, INSERT, UPDATE, DELETE, etc., at the start of the string.
-
-    :param query: A string to evaluate as a potential SQL query.
-    :return: True if the string appears to be a SQL query, False otherwise.
-    """
-    # Normalize the query by stripping whitespace
-    query = query.strip()
-
-    # Regex to check if the string starts with common SQL keywords
-    sql_pattern = re.compile(
-        r'^\s*(--.*\n\s*)*(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|WITH|EXPLAIN|MERGE|REPLACE|GRANT|REVOKE|TRUNCATE)\b',
-        re.IGNORECASE,
-    )
-    # Validate if the query matches the SQL pattern
-    return bool(sql_pattern.match(query))
