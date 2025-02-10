@@ -13,7 +13,7 @@ from llama_index.core.workflow import Context, Event, StartEvent, StopEvent, Wor
 from llama_index.llms.openai import OpenAI
 
 from .const import DEFAULT_DATASET_PROMPT, DEFAULT_RESPONSE_SYNTHESIS_PROMPT
-from .utils import get_python_type
+from .utils import get_python_type, is_sql_query
 
 logger = logging.getLogger('apify')
 
@@ -56,6 +56,14 @@ async def query_sql_dataset(dataset_id: str, sql_query: str) -> Any:
     sql_query = sql_query.replace('dataset', dataset_id)
     return duckdb.sql(sql_query).fetchall()
 
+def execute_sql_query(query: str) -> Any | None:
+    try:
+        # Execute the SQL query
+        return duckdb.sql(query).df().to_dict(orient='records')
+    except sqlite_utils.utils.sqlite3.OperationalError as exc:
+        logger.exception(f'Error executing query: {query}')
+        raise ValueError('Invalid query') from exc
+
 
 class DatasetAnalyzerEvent(Event):
     """
@@ -69,12 +77,46 @@ class DatasetAnalyzerEvent(Event):
 
     sql_query: str
     table_schema: dict[str, Any]
+
+class SynthesizeEvent(DatasetAnalyzerEvent):
     results: list[dict[str, Any]]
 
 
 class DatasetAnalyzeQueryEngineWorkflow(Workflow):
+
     @step
-    async def dataset_analyzer(self, ctx: Context, ev: StartEvent) -> DatasetAnalyzerEvent:
+    async def user_query_analyzer(self, ctx: Context, ev: StartEvent) -> DatasetAnalyzerEvent:
+        """ Analyze user query whether it is a SQL query or not.
+
+        If it is a SQL query, then it will be executed directly and results will be synthesized.
+        If it is not a SQL query, then it will be analyzed using a SQL-like query approach.
+        """
+        await ctx.set('query', ev.get('query'))
+        await ctx.set('llm', ev.get('llm'))
+        await ctx.set('table_name', ev.get('table_name'))
+
+        query = ev.get('query')
+        table_name = ev.get('table_name')
+
+        await load_dataset(table_name)
+        # Get the table schema in the formatL VARCHAR, INT, etc.
+        sql_schema = duckdb.sql(f'DESCRIBE {table_name}').fetchall()
+        # convert the SQL schema to a dictionary of column names and python types (for pydantic validation)
+        table_schema = {}
+        for col in sql_schema:
+            col_name, sql_type = col[0], col[1]
+            table_schema[col_name] = get_python_type(sql_type)
+
+        if is_sql_query(query):
+            query = query.replace('dataset', table_name)
+            results = execute_sql_query(query)
+            return SynthesizeEvent(sql_query=query, table_schema=table_schema, results=results)
+        return DatasetAnalyzerEvent(sql_query=query, table_schema=table_schema)
+
+
+
+    @step
+    async def dataset_analyzer(self, ctx: Context, ev: DatasetAnalyzerEvent) -> SynthesizeEvent:
         """
         Analyze Apify datatest using a SQL-like query approach.
 
@@ -94,24 +136,12 @@ class DatasetAnalyzeQueryEngineWorkflow(Workflow):
         - Executes the SQL query and retrieves the results.
         - Returns the results along with the SQL query and table schema.
         """
-        await ctx.set('query', ev.get('query'))
-        await ctx.set('llm', ev.get('llm'))
+        llm = await ctx.get('llm', default=None)
+        query = await ctx.get('query', default=None)
+        table_name = await ctx.get('table_name', default=None)
 
-        query = ev.get('query')
-        table_name = ev.get('table_name')
-        llm = ev.get('llm')
-
+        table_schema = ev.table_schema
         prompt = DEFAULT_DATASET_PROMPT
-
-        await load_dataset(table_name)
-        # Get the table schema in the formatL VARCHAR, INT, etc.
-        sql_schema = duckdb.sql(f'DESCRIBE {table_name}').fetchall()
-
-        # convert the SQL schema to a dictionary of column names and python types (for pydantic validation)
-        table_schema = {}
-        for col in sql_schema:
-            col_name, sql_type = col[0], col[1]
-            table_schema[col_name] = get_python_type(sql_type)
 
         # Get the SQL query with text-to-SQL prompt, provide table name and schema to ensure correctness
         response_str = await llm.apredict(
@@ -131,10 +161,10 @@ class DatasetAnalyzeQueryEngineWorkflow(Workflow):
             print_text(f'Error executing query: {sql_query}')
             raise ValueError('Invalid query') from exc
 
-        return DatasetAnalyzerEvent(sql_query=sql_query, table_schema=table_schema, results=results)
+        return SynthesizeEvent(sql_query=sql_query, table_schema=table_schema, results=results)
 
     @step
-    async def synthesize(self, ctx: Context, ev: DatasetAnalyzerEvent) -> StopEvent:
+    async def synthesize(self, ctx: Context, ev: SynthesizeEvent) -> StopEvent:
         """Synthesize the response."""
         llm = await ctx.get('llm', default=None)
         query = await ctx.get('query', default=None)
@@ -168,7 +198,8 @@ if __name__ == '__main__':
     llm_ = OpenAI(model='gpt-4o-mini', api_key=os.environ['OPENAI_API_KEY'])
     w = DatasetAnalyzeQueryEngineWorkflow()
     print(f'Dataset {dataset_id_} loaded successfully')  # noqa:T201
-    query_ = 'please give me restaurants with the best reviews and their phone numbers'
+    # query_ = 'please give me restaurants with the best reviews and their phone numbers'
+    query_ = "SELECT * FROM dataset WHERE title = 'Lucia Pizza Of Avenue X'"
 
     async def main() -> Any:
         r = await w.run(query=query_, llm=llm_, table_name=dataset_id_)
