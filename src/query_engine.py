@@ -81,7 +81,7 @@ class DatasetAnalyzeQueryEngineWorkflow(Workflow):
                 used, and the results of the query.
         """
         table_name = await ctx.get('table_name', default=None)
-        table_schema = await ctx.get('table_name', default=None)
+        table_schema = await ctx.get('table_schema', default=None)
 
         query = ev.query
 
@@ -103,7 +103,7 @@ class DatasetAnalyzeQueryEngineWorkflow(Workflow):
         """
         query = await ctx.get('query', default=None)
         response = synthesize_results(query, ev.sql_query, ev.results, ev.table_schema)
-        logger.info(f'Workflow answer: {response.response}, full response {response}')
+        logger.info(f'Workflow answer: {response.response}')
         return StopEvent(result=response)
 
 
