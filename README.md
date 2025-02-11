@@ -79,8 +79,7 @@ To use the Dataset query engine in **Standby mode**, send an HTTP GET request to
 ```
 https://database-query-engine.apify.actor/query?token=<APIFY_API_TOKEN>&query=return+phone+number&llmProviderApiKey=<OPENAI_API_KEY>
 ```
-where `<OPENAI_API_KEY>` is your **[OpenAI API Key](https://platform.openai.com/api-keys)**, and  
-`<APIFY_API_TOKEN>` is your **[Apify API Token](https://console.apify.com/settings/integrations)**.  
+where `<OPENAI_API_KEY>` is your **[OpenAI API Key](https://platform.openai.com/api-keys)**, and `<APIFY_API_TOKEN>` is your **[Apify API Token](https://console.apify.com/settings/integrations)**.
 Alternatively, you can pass the Apify `token` using the `Authorization` HTTP header for improved security.  
 
 The response is a JSON object containing the query results.  
