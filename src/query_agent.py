@@ -55,7 +55,7 @@ async def run_agent(query: str, table_name: str, table_schema: dict[str, Any], l
     )
 
     response: AgentChatResponse = await agent.achat(query)
-    logger.info(f'Agent answer: {response.response}, full response {response}')
+    logger.info(f'Agent answer: {response.response}')
     return response
 
 
