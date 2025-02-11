@@ -73,6 +73,7 @@ if __name__ == '__main__':
     print(f'Dataset {dataset_id_} loaded successfully')  # noqa:T201
     query_ = 'please give me restaurants with the best reviews and their phone numbers'  # noqa:ERA001,RUF100
     # query_ = "SELECT * FROM dataset WHERE title = 'Lucia Pizza Of Avenue X'"  # noqa:ERA001,RUF100
+    # query_ = 'find restaurants with wheelchair accessible entrance'  # noqa:ERA001,RUF100
 
     table_schema_ = asyncio.run(load_dataset(dataset_id_))
     answer = asyncio.run(run_agent(query_, dataset_id_, table_schema_, llm_))

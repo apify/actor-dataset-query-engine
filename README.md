@@ -169,3 +169,7 @@ And then you can run it locally using [Apify CLI](https://docs.apify.com/cli) as
 ```bash
 apify run -p
 ```
+
+## TODOs
+
+- Handle nested json fields
