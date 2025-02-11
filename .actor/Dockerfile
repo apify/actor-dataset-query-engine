@@ -24,7 +24,7 @@ RUN echo "Python version:" \
  && echo "uv version:" \
  && uv --version \
  && echo "Installing dependencies:" \
- && uv sync --frozen \
+ && uv sync --no-dev --frozen \
  && echo "All installed Python packages:" \
  && uv pip freeze
 

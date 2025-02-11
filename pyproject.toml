@@ -11,7 +11,6 @@ dependencies = [
     "llama-index>=0.12.15",
     "polars[pyarrow]>=1.21.0",
     "sqlite-utils>=3.38",
-    "sqlparse>=0.5.3",
     "starlette>=0.45.3",
     "uvicorn>=0.34.0",
 ]
