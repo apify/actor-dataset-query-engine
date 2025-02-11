@@ -1,8 +1,5 @@
 # Dataset query engine
 
-FIXME: TODO
-ACTOR push dataset!!!
-
 This Actor allows you to use natural language to query and retrieve results from an [Apify dataset](https://docs.apify.com/platform/storage/dataset).
 It provides a query engine that loads a dataset, executes SQL queries against the data, and synthesizes results.
 
