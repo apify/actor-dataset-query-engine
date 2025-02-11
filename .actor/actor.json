@@ -3,7 +3,7 @@
 	"name": "dataset-query-engine",
 	"title": "Dataset query engine",
 	"description": "Query Apify dataset with a natural language or with SQL query",
-	"version": "0.0",
+	"version": "0.1",
 	"buildTag": "latest",
 	"usesStandbyMode": true,
 	"meta": {
