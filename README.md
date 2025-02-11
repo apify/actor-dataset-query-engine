@@ -12,7 +12,7 @@ If you have a dataset scraped using any Apify Actor, you can easily extract rele
 
 For example, if you use the [Google Maps Email Extractor](https://apify.com/lukaskrivka/google-maps-with-contact-details) to search for **"the best pizza in New York,"** you’ll get a dataset containing contact details and restaurant information.  
 
-With the **Query engine**, you can ask questions like:  
+With the **query engine**, you can ask questions like:  
 
 ```
 "Provide a list of top restaurants with the best reviews, along with their phone numbers."
@@ -32,7 +32,7 @@ This makes it easy to extract useful data without manually filtering through lar
 
 ## 🛢 How does the query agent work?
 
-The Query engine operates using two configurable approaches: AI Agent or Agentic workflow.
+The query engine operates using two configurable approaches: AI Agent or Agentic workflow.
 While the AI Agent provides flexibility and autonomous reasoning, the Agentic Workflow ensures predictable and controlled processing.
 The choice is determined by the useAgent parameter.
 
@@ -62,7 +62,7 @@ They consist of individual `steps`, with each step designed to process specific 
 
 ## ⚙️ Usage  
 
-Actor can be used in two ways: **as a standard Actor** by passing an inout, or in **Standby mode** via an HTTP request.  c
+Actor can be used in two ways: **as a standard Actor** by passing an input, or in **Standby mode** via an HTTP request.
 
 ### Normal Actor run  
 
@@ -77,7 +77,7 @@ Additionally, starting a **Docker container** takes time, and the Actor can hand
 The Actor supports **[Standby mode](https://docs.apify.com/platform/actors/running/standby)**, where it runs an HTTP server that processes queries on demand.
 This mode eliminates the need to **reload the dataset** for each request and **removes container startup time**.
 
-To use the Database query engine in **Standby mode**, send an HTTP GET request to:  
+To use the Dataset query engine in **Standby mode**, send an HTTP GET request to:  
 
 ```
 https://database-query-engine.apify.actor/query?token=<APIFY_API_TOKEN>&query=return+phone+number&llmProviderApiKey=<OPENAI_API_KEY>
@@ -106,11 +106,11 @@ The `/` GET HTTP endpoint supports the following parameters:
 
 ## 🔌 Integration with LLMs  
 
-Database query engine has been designed for easy integration with LLM applications, GPTs, and Model Context Protocol.
+Dataset query engine has been designed for easy integration with LLM applications, GPTs, and Model Context Protocol.
 
 ### OpenAPI schema
 
-Here you can find the [OpenAPI 3.1.0 schema](https://apify.com/jiri.spilka/database-query-engine/api/openapi)
+Here you can find the [OpenAPI 3.1.0 schema](https://apify.com/jiri.spilka/database-query-engine/api/openapi).
 The schema includes all available query parameters, but only `query`, `datasetId`, and `llmProviderApiKey` are required.
 You can omit other parameters if their default values are suitable for your application.
 
@@ -128,13 +128,13 @@ Learn more about [adding custom actions to your GPTs with Apify Actors](https://
 
 ### Anthropic: Model Context Protocol (MCP) Server (in progress)
 
-NOTE: The requirement to provide llmProviderApiKey as Actor input is currently a blocker.
+NOTE: The requirement to provide `llmProviderApiKey` as an Actor input is currently a blocker.
 This can be resolved using Price Per Event pricing (or Price Per Job).
 If this is blocking your use case, please provide feedback by raising an issue.
 
-The Database query engine can also be used as an [MCP server](https://github.com/modelcontextprotocol) and integrated with AI applications and other AI agents, such as Claude Desktop.
+The dataset query engine can also be used as an [MCP server](https://github.com/modelcontextprotocol) and integrated with AI applications and other AI agents, such as Claude Desktop.
 You can integrate it using **Apify's [Actors MCP Server](https://apify.com/apify/actors-mcp-server)**. Simply provide `query`, `datasetId`, and `llmProviderApiKey` to receive an answer.
-To use it, start the **Actors MCP Server** with the **Database query engine** included in the list of available Actors.
+To use it, start the **Actors MCP Server** with the **Dataset query engine** included in the list of available Actors.
 
 - For deployment on the **Apify platform**, follow the **[Standby mode setup](https://apify.com/apify/actors-mcp-server#standby-web-server)**.
 - For running the Actor **locally over stdio**, refer to the **[Claude Desktop setup](https://apify.com/apify/actors-mcp-server#claude-desktop)**.
@@ -161,9 +161,9 @@ Setup input arguments in `actor-dataset-query-engine/storage/key_value_stores/de
 
 ```
 {
-  "query": "",
-  "datasetId": "",
-  "llmProviderApiKey": ""
+  "query": "email of Italian restaurants in New York",
+  "datasetId": "YOUR-DATASET-ID",
+  "llmProviderApiKey": "YOUR-LLM-PROVIDER-API-KEY"
 }
 ```
 
