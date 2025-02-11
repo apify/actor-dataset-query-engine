@@ -116,7 +116,7 @@ app = Starlette(
 
 async def start_server() -> None:
     logger.info(f'Starting the HTTP server at {ACTOR_URL}')
-    config = uvicorn.Config(app, port=PORT)
+    config = uvicorn.Config(app, host='0.0.0.0', port=PORT)  # noqa: S104
     server = uvicorn.Server(config)
     await server.serve()
 

@@ -38,4 +38,5 @@ COPY . ./
 
 # Specify how to launch the source code of your Actor.
 # By default, the "python3 -m ." command is run
+ENV PATH="/usr/src/app/.venv/bin:$PATH"
 CMD ["python3", "-m", "src"]
