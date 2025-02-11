@@ -17,8 +17,10 @@ class DatasetAnalyzerEvent(Event):
         table_schema (Dict[str, Any]): Schema of the analyzed table.
         results (List[Dict[str, Any]]): Query execution results.
     """
+
     query: str
     table_schema: dict[str, Any]
+
 
 class SynthesizeEvent(Event):
     sql_query: str
@@ -27,7 +29,6 @@ class SynthesizeEvent(Event):
 
 
 class DatasetAnalyzeQueryEngineWorkflow(Workflow):
-
     @step
     async def user_query_analyzer(self, ctx: Context, ev: StartEvent) -> DatasetAnalyzerEvent | SynthesizeEvent:
         """
@@ -63,8 +64,6 @@ class DatasetAnalyzeQueryEngineWorkflow(Workflow):
 
         return DatasetAnalyzerEvent(query=query, table_schema=table_schema)
 
-
-
     @step
     async def dataset_analyzer(self, ctx: Context, ev: DatasetAnalyzerEvent) -> SynthesizeEvent:
         """
@@ -90,7 +89,6 @@ class DatasetAnalyzeQueryEngineWorkflow(Workflow):
         results = execute_sql(sql_query)
         return SynthesizeEvent(sql_query=sql_query, table_schema=table_schema, results=results)
 
-
     @step
     async def synthesize(self, ctx: Context, ev: SynthesizeEvent) -> StopEvent:
         """
@@ -105,6 +103,7 @@ class DatasetAnalyzeQueryEngineWorkflow(Workflow):
         """
         query = await ctx.get('query', default=None)
         response = synthesize_results(query, ev.sql_query, ev.results, ev.table_schema)
+        logger.info(f'Workflow answer: {response.response}, full response {response}')
         return StopEvent(result=response)
 
 

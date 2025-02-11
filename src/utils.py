@@ -73,6 +73,3 @@ def get_python_type(sql_type: str) -> type:
 
     # Provide a fallback to `str` if the type is unrecognized.
     return sql_type_mappings.get(sql_type, str)
-
-
-

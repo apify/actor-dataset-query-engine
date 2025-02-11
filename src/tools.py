@@ -14,10 +14,7 @@ from .const import DEFAULT_DATASET_PROMPT, DEFAULT_RESPONSE_SYNTHESIS_PROMPT
 from .utils import get_python_type
 
 # Constant for detecting starting SQL keywords, with typical commands such as SELECT, INSERT, etc.
-SQL_QUERY_PATTERN = re.compile(
-    r'^\s*(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|DROP|ALTER)\b',
-    re.IGNORECASE
-)
+SQL_QUERY_PATTERN = re.compile(r'^\s*(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|DROP|ALTER)\b', re.IGNORECASE)
 DROP_TABLE_QUERY = 'DROP TABLE IF EXISTS {table_name};'
 SHOW_TABLES_QUERY = 'SHOW TABLES;'
 
@@ -38,7 +35,7 @@ class LLMRegistry:
         cls._llm = new_llm
 
 
-async def load_dataset(dataset_id: str, *, refresh_dataset: bool = False) -> dict[str, Any] | None:
+async def load_dataset(dataset_id: str, *, refresh_dataset: bool = False) -> dict[str, Any]:
     """
     Load a dataset into DuckDB after fetching it from Apify.
 
@@ -91,6 +88,7 @@ def is_query_sql(query: str) -> bool:
     """
     return bool(SQL_QUERY_PATTERN.match(query))
 
+
 async def user_query_to_sql(query: str, table_name: str, table_schema: dict[str, Any]) -> str:
     """
     Converts a user query written in natural language into a SQL query.
@@ -117,7 +115,7 @@ async def user_query_to_sql(query: str, table_name: str, table_schema: dict[str,
     return sql_parser.parse_response_to_sql(response_str, QueryBundle(query_str=query))
 
 
-def execute_sql(sql_query: str) -> list[dict[str, Any]] | None:
+def execute_sql(sql_query: str) -> list[dict[str, Any]] | Any:
     """
     Executes an SQL query and returns the result.
 
@@ -136,7 +134,7 @@ def execute_sql(sql_query: str) -> list[dict[str, Any]] | None:
 
 
 def synthesize_results(
-        query: str, sql_query: str, db_results: list[dict[str, Any]], table_schema: dict[str, Any]
+    query: str, sql_query: str, db_results: list[dict[str, Any]], table_schema: dict[str, Any]
 ) -> Response:
     """
     Synthesize a human-readable response using an LLM based on provided SQL query, schema, and database results.

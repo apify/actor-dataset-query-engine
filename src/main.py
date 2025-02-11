@@ -37,13 +37,16 @@ if ACTOR_IS_AT_HOME:
     PORT = Actor.config.standby_port if STANDBY_MODE else Actor.config.web_server_port
 else:
     from dotenv import load_dotenv
+
     load_dotenv(pathlib.Path(__file__).parent.joinpath('.env').resolve())
     HOST = 'http://localhost'
     PORT = 4321
 
 ACTOR_URL = f'{HOST}' if ACTOR_IS_AT_HOME else f'{HOST}:{PORT}'
-STANDBY_MESSAGE = (f'Actor is running in standby mode, please provide query params at {ACTOR_URL}, you can use the '
-           f'following params: {ActorInput.model_fields}')
+STANDBY_MESSAGE = (
+    f'Actor is running in standby mode, please provide query params at {ACTOR_URL}, you can use the '
+    f'following params: {ActorInput.model_fields}'
+)
 
 
 async def process_query(actor_input: ActorInput) -> str:
@@ -61,22 +64,24 @@ async def process_query(actor_input: ActorInput) -> str:
     llm = OpenAI(model=str(actor_input.modelName), api_key=actor_input.llmProviderApiKey, temperature=0)
     if actor_input.useAgent:
         try:
-            return await run_agent(actor_input.query, table_name=dataset_id, table_schema=table_schema, llm=llm)
+            result = await run_agent(actor_input.query, table_name=dataset_id, table_schema=table_schema, llm=llm)
         except Exception as e:
             msg = f'Error running workflow, error: {e}'
             logger.exception(msg)
             raise WorkflowExecutionError(msg) from e
     else:
         try:
-            return (await run_workflow(query=actor_input.query, table_name=dataset_id, llm=llm)).response
+            result = await run_workflow(query=actor_input.query, table_name=dataset_id, llm=llm)
         except Exception as e:
             msg = f'Error running workflow, error: {e}'
             logger.exception(msg)
             raise WorkflowExecutionError(msg) from e
 
+    await Actor.push_data({'datasetId': dataset_id, 'query': actor_input.query, 'answer': result.response})
+    return result.response
+
 
 async def route_root(request: Request) -> JSONResponse:
-
     logger.debug('Received request at /')
     if request.method != 'GET':
         return JSONResponse({'message': f'Method: {request.method} not allowed'}, status_code=405)
@@ -89,7 +94,7 @@ async def route_root(request: Request) -> JSONResponse:
     query_params.pop('token', None)
     if request.query_params:
         try:
-            actor_input = ActorInput(**query_params)
+            actor_input = ActorInput(**query_params)  # type:ignore[arg-type]
             result = await process_query(actor_input)
             logger.info(f'Query {actor_input.query} processed successfully, result: {result}')
             return JSONResponse({'message': result})
@@ -136,6 +141,8 @@ async def main() -> None:
                 Actor.log.error('Error in inputs: %s', str(e))
                 await Actor.fail(status_message=str(e))
 
+
 if __name__ == '__main__':
     import asyncio
+
     asyncio.run(main())
