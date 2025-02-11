@@ -56,7 +56,7 @@
       "default": 0
     },
     "useAgent": {
-      "title": "Use AI Agent instead of workflow",
+      "title": "Use AI Agent",
       "type": "boolean",
       "description": "When enabled, an AI Agent is used over a deterministic workflow. When to use an AI Agent? The agent can solve a broader range of tasks but can also be less reliable.",
       "default": true

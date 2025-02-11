@@ -3,7 +3,7 @@
 This Actor allows you to use natural language to query and retrieve results from an [Apify dataset](https://docs.apify.com/platform/storage/dataset).
 It provides a query engine that loads a dataset, executes SQL queries against the data, and synthesizes results.
 
-## 🎯 How can you use the query engine?
+## 🎯 How to use the dataset query engine?
 
 If you have a dataset scraped using any Apify Actor, you can easily extract relevant insights from it.  
 
@@ -27,9 +27,9 @@ Here are some restaurants with outstanding reviews and their corresponding phone
 
 This makes it easy to extract useful data without manually filtering through large datasets. 🚀  
 
-## 🛢 How does the query agent work?
+## 🛢 How does the query engine work?
 
-The query engine operates using two configurable approaches: AI Agent or Agentic workflow.
+The query engine operates using two configurable approaches: **AI Agent** or **Agentic workflow**.
 While the AI Agent provides flexibility and autonomous reasoning, the Agentic Workflow ensures predictable and controlled processing.
 The choice is determined by the useAgent parameter.
 
