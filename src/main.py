@@ -148,8 +148,9 @@ async def main() -> None:
                 actor_input = await check_inputs(actor_input, payload)
                 await process_query(actor_input)
             except Exception as e:
-                Actor.log.error('Error in inputs: %s', str(e))
-                await Actor.fail(status_message=str(e))
+                msg = f'Failed to process query, error {e}'
+                logger.exception(msg)
+                await Actor.fail(status_message=msg)
 
 
 if __name__ == '__main__':
