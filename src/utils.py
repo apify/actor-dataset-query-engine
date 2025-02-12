@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, time
 
 from apify import Actor
@@ -7,6 +8,11 @@ from .input_model import DatasetQueryAgent as ActorInput
 
 async def check_inputs(actor_input: ActorInput, payload: dict) -> ActorInput:
     """Check that provided input exists"""
+
+    if actor_input.debugMode:
+        Actor.log.info('Debug mode is enabled')
+        apify_logger = logging.getLogger('apify')
+        apify_logger.setLevel(logging.DEBUG)
 
     resource = payload.get('payload', {}).get('resource', {})
     dataset_id = resource.get('defaultDatasetId') or actor_input.datasetId or ''

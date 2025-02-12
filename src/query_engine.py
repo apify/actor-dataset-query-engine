@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Any
 
 from llama_index.core.workflow import Context, Event, StartEvent, StopEvent, Workflow, step
@@ -47,15 +46,14 @@ class DatasetAnalyzeQueryEngineWorkflow(Workflow):
         llm = ev.get('llm')
         query = ev.get('query')
         table_name = ev.get('table_name')
+        table_schema = ev.get('table_schema')
 
         await ctx.set('llm', llm)
         await ctx.set('query', ev.get('query'))
         await ctx.set('table_name', ev.get('table_name'))
+        await ctx.set('table_schema', ev.get('table_schema'))
 
         LLMRegistry.set(llm)
-        table_schema = await load_dataset(table_name)
-
-        await ctx.set('table_schema', table_schema)
 
         if is_query_sql(query):
             sql_query = query.replace('dataset', table_name)
@@ -107,30 +105,8 @@ class DatasetAnalyzeQueryEngineWorkflow(Workflow):
         return StopEvent(result=response)
 
 
-async def run_workflow(query: str, table_name: str, llm: OpenAI) -> Any:
-    w = DatasetAnalyzeQueryEngineWorkflow()
-    return await w.run(query=query, llm=llm, table_name=table_name)
-
-
-if __name__ == '__main__':
-    import asyncio
-
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
-    dataset_id_ = 'nLlhc8Fz9S5dCTQab'
-
-    llm_ = OpenAI(model='gpt-4o-mini', api_key=os.environ['OPENAI_API_KEY'])
-    w = DatasetAnalyzeQueryEngineWorkflow()
-    print(f'Dataset {dataset_id_} loaded successfully')  # noqa:T201
-    # query_ = 'please give me restaurants with the best reviews and their phone numbers'  # noqa:ERA001,RUF100
-    query_ = "SELECT * FROM dataset WHERE title = 'Lucia Pizza Of Avenue X'"  # noqa:ERA001,RUF100
-
-    async def main() -> Any:
-        r = await w.run(query=query_, llm=llm_, table_name=dataset_id_)
-        print(f'> Question: {query_}')  # noqa:T201
-        print(f'Answer: {r}')  # noqa:T201
-        return r
-
-    asyncio.run(main())
+async def run_workflow(
+        query: str, table_name: str, table_schema: dict[str, Any], llm: OpenAI, verbose: bool = False
+) -> Any:
+    w = DatasetAnalyzeQueryEngineWorkflow(verbose=verbose)
+    return await w.run(query=query, llm=llm, table_name=table_name, table_schema=table_schema)

@@ -13,7 +13,7 @@ apify_client_logger.setLevel(logging.ERROR)
 apify_client_logger.addHandler(handler)
 
 apify_logger = logging.getLogger('apify')
-apify_logger.setLevel(logging.DEBUG)
+apify_logger.setLevel(logging.INFO)
 apify_logger.addHandler(handler)
 
 asyncio.run(main())

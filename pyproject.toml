@@ -60,6 +60,8 @@ ignore = [
     "TD002",   # Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>: ...
     "TID252",  # Prefer absolute imports over relative imports from parent modules
     "TRY003",  # Avoid specifying long messages outside the exception class
+    "FBT001",  # Boolean-typed positional argument in function definition
+    "FBT002",  # Boolean default positional argument in function definition
     #
     "D",
 ]

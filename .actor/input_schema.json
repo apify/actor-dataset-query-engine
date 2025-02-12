@@ -60,6 +60,12 @@
       "type": "boolean",
       "description": "When enabled, an AI Agent is used over a deterministic workflow. When to use an AI Agent? The agent can solve a broader range of tasks but can also be less reliable.",
       "default": true
+    },
+      "debugMode": {
+        "title": "Enable debug modde",
+        "type": "boolean",
+        "description": "When enabled, Actor will log additional debug messages from the Agent, including detailed reasoning steps.\n",
+        "default": false
     }
   },
   "required": [

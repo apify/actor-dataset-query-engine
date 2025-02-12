@@ -61,9 +61,9 @@ async def load_dataset(dataset_id: str, *, refresh_dataset: bool = False) -> dic
             duckdb.sql(DROP_TABLE_QUERY.format(table_name=dataset_id))
 
         duckdb.register(dataset_id, dataset)
-        logger.debug(f'Dataset {dataset_id} loaded successfully')
+        logger.info(f'Dataset {dataset_id} loaded successfully')
     else:
-        logger.debug(f'Dataset {dataset_id} already loaded')
+        logger.info(f'Dataset {dataset_id} already loaded')
 
     # Get the table schema in the formatL VARCHAR, INT, etc.
     sql_schema = duckdb.sql(f'DESCRIBE {dataset_id}').fetchall()
