@@ -1,7 +1,7 @@
 {
 	"actorSpecification": 1,
 	"name": "dataset-query-engine",
-	"title": "Dataset query engine",
+	"title": "Dataset Query Engine",
 	"description": "Query Apify dataset with a natural language or with SQL query",
 	"version": "0.1",
 	"buildTag": "latest",

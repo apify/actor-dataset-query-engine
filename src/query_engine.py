@@ -4,7 +4,7 @@ from typing import Any
 from llama_index.core.workflow import Context, Event, StartEvent, StopEvent, Workflow, step
 from llama_index.llms.openai import OpenAI
 
-from .tools import LLMRegistry, execute_sql, is_query_sql, load_dataset, synthesize_results, user_query_to_sql
+from .tools import LLMRegistry, execute_sql, is_query_sql, synthesize_results, user_query_to_sql
 
 logger = logging.getLogger('apify')
 

@@ -1,5 +1,5 @@
 {
-  "title": "Dataset query agent",
+  "title": "Dataset Query Engine",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
