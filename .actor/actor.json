@@ -1,0 +1,49 @@
+{
+	"actorSpecification": 1,
+	"name": "dataset-query-engine",
+	"title": "Dataset Query Engine",
+	"description": "Query Apify dataset with a natural language or with SQL query",
+	"version": "0.1",
+	"buildTag": "latest",
+	"usesStandbyMode": true,
+	"meta": {
+		"templateId": "python-standby"
+	},
+	"dockerfile": "./Dockerfile",
+    "storages": {
+        "dataset": {
+            "actorSpecification": 1,
+            "title": "Dataset query engine",
+            "description": "Retrieve answers from an Apify dataset using natural language queries.",
+            "views": {
+                "overview": {
+                    "title": "Overview",
+                    "transformation": {
+                        "fields": [
+                            "datasetId",
+							"query",
+                            "answer"
+                        ]
+                    },
+                    "display": {
+                        "component": "table",
+                        "properties": {
+                            "datasetId": {
+                                "label": "Dataset ID",
+                                "format": "text"
+                            },
+                            "query": {
+                                "label": "Query",
+                                "format": "text"
+                            },
+                            "answer": {
+                                "label": "Answer",
+                                "format": "text"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
