@@ -69,7 +69,7 @@ async def process_query(actor_input: ActorInput) -> str:
                 table_name=dataset_id,
                 table_schema=table_schema,
                 llm=llm,
-                verbose=actor_input.debugMode
+                verbose=actor_input.debugMode,
             )
         except Exception as e:
             msg = f'Error running workflow, error: {e}'
@@ -82,7 +82,7 @@ async def process_query(actor_input: ActorInput) -> str:
                 table_name=dataset_id,
                 table_schema=table_schema,
                 llm=llm,
-                verbose=actor_input.debugMode
+                verbose=actor_input.debugMode,
             )
         except Exception as e:
             msg = f'Error running workflow, error: {e}'

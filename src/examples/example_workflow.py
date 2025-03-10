@@ -25,10 +25,12 @@ w = DatasetAnalyzeQueryEngineWorkflow()
 # query_ = 'please give me restaurants with the best reviews and their phone numbers'  # noqa:ERA001,RUF100
 query_ = "SELECT * FROM dataset WHERE title = 'Lucia Pizza Of Avenue X'"  # noqa:ERA001,RUF100
 
+
 async def main() -> Any:
     r = await w.run(query=query_, llm=llm_, table_name=dataset_id_, table_schema=table_schema_)
     print(f'> Question: {query_}')  # noqa:T201
     print(f'Answer: {r}')  # noqa:T201
     return r
+
 
 asyncio.run(main())
