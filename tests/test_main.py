@@ -31,7 +31,6 @@ async def test_process_query() -> None:
     test_data = {
         'query': 'test query',
         'datasetId': 'test_dataset',
-        'llmProviderApiKey': 'test_api_key'
     }
     response = client.get('/', params=test_data)
     assert response.status_code == 400, 'Request processing error'

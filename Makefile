@@ -39,4 +39,4 @@ pydantic-model:
 	datamodel-codegen --input .actor/input_schema.json --output $(DIRS_WITH_CODE)/input_model.py  --input-file-type jsonschema  --field-constraints  --enum-field-as-literal all
 
 pytest:
-	uv run -C $(DIRS_WITH_CODE) pytest --with-integration --vcr-record=none
+	uv run pytest

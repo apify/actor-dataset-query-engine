@@ -3,7 +3,7 @@ from datetime import date, datetime, time
 
 from apify import Actor
 
-from .input_model import DatasetQueryAgent as ActorInput
+from .input_model import DatasetQueryEngine as ActorInput
 
 
 async def check_inputs(actor_input: ActorInput, payload: dict) -> ActorInput:

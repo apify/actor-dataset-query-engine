@@ -1,0 +1,12 @@
+{
+    "actor-start": {
+        "eventTitle": "Actor start",
+        "eventDescription": "Fee for Actor start",
+        "eventPriceUsd": 0.05
+    },
+    "query-completed": {
+        "eventTitle": "Query completed",
+        "eventDescription": "Fee for each query completed",
+        "eventPriceUsd": 0.01
+    }
+}
