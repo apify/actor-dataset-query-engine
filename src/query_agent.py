@@ -18,7 +18,7 @@ logger = logging.getLogger('apify')
 
 
 async def run_agent(
-        query: str, table_name: str, table_schema: dict[str, Any], llm: OpenAI, verbose: bool = False
+    query: str, table_name: str, table_schema: dict[str, Any], llm: OpenAI, verbose: bool = False
 ) -> AgentChatResponse:
     """
     Runs an agent to process a query using an LLM and tools.

@@ -1,5 +1,7 @@
 import logging
+import os
 import pathlib
+from enum import Enum
 
 import uvicorn
 from apify import Actor
@@ -12,7 +14,7 @@ from starlette.routing import Route
 
 from .const import HEADERS_READINESS_PROBE
 from .exceptions import DatasetLoadError, WorkflowExecutionError
-from .input_model import DatasetQueryAgent as ActorInput
+from .input_model import DatasetQueryEngine as ActorInput
 from .query_agent import run_agent
 from .query_engine import run_workflow
 from .tools import load_dataset
@@ -24,7 +26,11 @@ class ActorInputStandbyStarts(ActorInput):
 
     query: str = ''
     datasetId: str = ''  # noqa:N815
-    llmProviderApiKey: str = ''  # noqa: N815
+
+
+class ChargeEvent(str, Enum):
+    ACTOR_START = 'actor-start'
+    QUERY_COMPLETED = 'query-completed'
 
 
 logger = logging.getLogger('apify')
@@ -61,7 +67,7 @@ async def process_query(actor_input: ActorInput) -> str:
         logger.exception(msg)
         raise DatasetLoadError(msg) from e
 
-    llm = OpenAI(model=str(actor_input.modelName), api_key=actor_input.llmProviderApiKey, temperature=0)
+    llm = OpenAI(model=str(actor_input.modelName), temperature=0, api_key=os.getenv('OPENAI_API_KEY'))
     if actor_input.useAgent:
         try:
             result = await run_agent(
@@ -69,7 +75,7 @@ async def process_query(actor_input: ActorInput) -> str:
                 table_name=dataset_id,
                 table_schema=table_schema,
                 llm=llm,
-                verbose=actor_input.debugMode
+                verbose=actor_input.debugMode or False,
             )
         except Exception as e:
             msg = f'Error running workflow, error: {e}'
@@ -82,7 +88,7 @@ async def process_query(actor_input: ActorInput) -> str:
                 table_name=dataset_id,
                 table_schema=table_schema,
                 llm=llm,
-                verbose=actor_input.debugMode
+                verbose=actor_input.debugMode or False,
             )
         except Exception as e:
             msg = f'Error running workflow, error: {e}'
@@ -90,6 +96,7 @@ async def process_query(actor_input: ActorInput) -> str:
             raise WorkflowExecutionError(msg) from e
 
     await Actor.push_data({'datasetId': dataset_id, 'query': actor_input.query, 'answer': result.response})
+    await Actor.charge(ChargeEvent.QUERY_COMPLETED)
     return result.response
 
 
@@ -133,8 +140,15 @@ async def start_server() -> None:
     await server.serve()
 
 
+async def check_openai_api_key() -> None:
+    if not os.getenv('OPENAI_API_KEY'):
+        await Actor.fail(status_message='OPENAI_API_KEY is not set. Please contact Actor developer.')
+
+
 async def main() -> None:
     async with Actor:
+        await check_openai_api_key()
+        await Actor.charge(ChargeEvent.ACTOR_START)
         if STANDBY_MODE:
             await start_server()
         else:

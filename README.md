@@ -77,7 +77,7 @@ This mode eliminates the need to **reload the dataset** for each request and **r
 To use the Dataset query engine in **Standby mode**, send an HTTP GET request to:  
 
 ```
-https://database-query-engine.apify.actor/query?token=<APIFY_API_TOKEN>&query=return+phone+number&llmProviderApiKey=<OPENAI_API_KEY>
+https://database-query-engine.apify.actor/query?token=<APIFY_API_TOKEN>&query=return+phone+number
 ```
 where `<OPENAI_API_KEY>` is your **[OpenAI API Key](https://platform.openai.com/api-keys)**, and `<APIFY_API_TOKEN>` is your **[Apify API Token](https://console.apify.com/settings/integrations)**.
 Alternatively, you can pass the Apify `token` using the `Authorization` HTTP header for improved security.  
@@ -88,16 +88,15 @@ The response is a JSON object containing the query results.
 
 The `/` GET HTTP endpoint supports the following parameters:  
 
-| Parameter             | Type     | Default          | Description                                                                                                                      |
-|----------------------|---------|------------------|----------------------------------------------------------------------------------------------------------------------------------|
-| `query`             | string  | N/A              | SQL query or a natural language query. If a natural language query is provided, it is converted to SQL before execution.       |
-| `datasetId`         | string  | N/A              | The ID of the dataset to query.                                                                                                |
-| `modelName`         | string  | `gpt-4o-mini`    | Specifies the LLM for SQL generation and query synthesis. Currently supports OpenAI models.                                    |
-| `llmProviderApiKey` | string  | N/A              | API key for accessing a Large Language Model.                                                                                  |
-| `refreshDataset`    | boolean | `false`          | If enabled, reloads the dataset to ensure updated data is available.                                                           |
-| `limit`            | integer | No limit         | Maximum number of items to return.                                                                                             |
-| `offset`           | integer | `0`              | Number of items to skip before returning data.                                                                                 |
-| `useAgent`         | boolean | `true`           | Enables AI-powered query handling instead of a deterministic workflow. The AI Agent can handle more tasks but may be less reliable. |
+| Parameter        | Type    | Default        | Description                                                                                                                         |
+|------------------|---------|----------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `query`          | string  | N/A            | SQL query or a natural language query. If a natural language query is provided, it is converted to SQL before execution.            |
+| `datasetId`      | string  | N/A            | The ID of the dataset to query.                                                                                                     |
+| `modelName`      | string  | `gpt-4o-mini`  | Specifies the LLM for SQL generation and query synthesis. Currently supports OpenAI models.                                         |
+| `refreshDataset` | boolean | `false`        | If enabled, reloads the dataset to ensure updated data is available.                                                                |
+| `limit`          | integer | No limit       | Maximum number of items to return.                                                                                                  |
+| `offset`         | integer | `0`            | Number of items to skip before returning data.                                                                                      |
+| `useAgent`       | boolean | `true`         | Enables AI-powered query handling instead of a deterministic workflow. The AI Agent can handle more tasks but may be less reliable. |
 
 
 ## 🔌 Integration with LLMs  
@@ -107,7 +106,7 @@ Dataset query engine has been designed for easy integration with LLM application
 ### OpenAPI schema
 
 Here you can find the [OpenAPI 3.1.0 schema](https://apify.com/jiri.spilka/database-query-engine/api/openapi).
-The schema includes all available query parameters, but only `query`, `datasetId`, and `llmProviderApiKey` are required.
+The schema includes all available query parameters, but only `query` and `datasetId` are required.
 You can omit other parameters if their default values are suitable for your application.
 
 ### OpenAI GPTs
@@ -122,18 +121,24 @@ You can add the Dataset query engine to your GPTs by creating a custom action. H
 
 Learn more about [adding custom actions to your GPTs with Apify Actors](https://blog.apify.com/add-custom-actions-to-your-gpts/) on Apify Blog.
 
-### Anthropic: Model Context Protocol (MCP) Server (in progress)
-
-NOTE: The requirement to provide `llmProviderApiKey` as an Actor input is currently a blocker.
-This can be resolved using Price Per Event pricing (or Price Per Job).
-If this is blocking your use case, please provide feedback by raising an issue.
+### Anthropic: Model Context Protocol (MCP) Server
 
 The dataset query engine can also be used as an [MCP server](https://github.com/modelcontextprotocol) and integrated with AI applications and other AI agents, such as Claude Desktop.
-You can integrate it using **Apify's [Actors MCP Server](https://apify.com/apify/actors-mcp-server)**. Simply provide `query`, `datasetId`, and `llmProviderApiKey` to receive an answer.
+You can integrate it using **Apify's [Actors MCP Server](https://apify.com/apify/actors-mcp-server)**. Simply provide `query`, `datasetId`.
 To use it, start the **Actors MCP Server** with the **Dataset query engine** included in the list of available Actors.
 
 - For deployment on the **Apify platform**, follow the **[Standby mode setup](https://apify.com/apify/actors-mcp-server#standby-web-server)**.
 - For running the Actor **locally over stdio**, refer to the **[Claude Desktop setup](https://apify.com/apify/actors-mcp-server#claude-desktop)**.
+
+## 💰 Pricing
+
+This Actor uses the [Pay Per Event](https://docs.apify.com/sdk/js/docs/next/guides/pay-per-event) (PPE) model for flexible, usage-based pricing. 
+It currently charges for Actor start and a flat fee per task completion.
+
+| Event           | Price (USD) |
+|-----------------|-------------|
+| Actor start     | $0.05       |
+| Query completed | $0.01       |
 
 ## 👷🏼 Development
 
@@ -158,8 +163,7 @@ Setup input arguments in `actor-dataset-query-engine/storage/key_value_stores/de
 ```
 {
   "query": "email of Italian restaurants in New York",
-  "datasetId": "YOUR-DATASET-ID",
-  "llmProviderApiKey": "YOUR-LLM-PROVIDER-API-KEY"
+  "datasetId": "YOUR-DATASET-ID"
 }
 ```
 
@@ -169,6 +173,10 @@ And then you can run it locally using [Apify CLI](https://docs.apify.com/cli) as
 apify run -p
 ```
 
-## TODOs
+## 📖 Learn more
 
-- Handle nested json fields
+- [AI agent workflow: building an agent to query Apify datasets](https://blog.apify.com/ai-agent-workflow/)
+- [AI agent architecture](https://blog.apify.com/ai-agent-architecture)
+- [What are AI agents?](https://blog.apify.com/what-are-ai-agents/)
+- [How to build an AI agent on Apify](https://blog.apify.com/how-to-build-an-ai-agent/)
+- [What is Anthropic's Model Context Protocol (and why does it matter)?](https://blog.apify.com/what-is-model-context-protocol/)

@@ -106,7 +106,7 @@ class DatasetAnalyzeQueryEngineWorkflow(Workflow):
 
 
 async def run_workflow(
-        query: str, table_name: str, table_schema: dict[str, Any], llm: OpenAI, verbose: bool = False
+    query: str, table_name: str, table_schema: dict[str, Any], llm: OpenAI, verbose: bool = False
 ) -> Any:
     w = DatasetAnalyzeQueryEngineWorkflow(verbose=verbose)
     return await w.run(query=query, llm=llm, table_name=table_name, table_schema=table_schema)
